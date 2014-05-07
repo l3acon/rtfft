@@ -98,6 +98,7 @@ int main( void )
 	  X[i] = sin(b*100) * exp(-b) ;
 	  b += step;
 	}
+	
 	//printf("VALUES ---- \n");
 	//for(int i = 0; i < SIZE; ++i)
 	//{
