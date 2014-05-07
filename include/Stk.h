@@ -393,9 +393,12 @@ public:
    */
   StkFloat dataRate( void ) const { return dataRate_; };
 
+public:
+  StkFloat *data_;
+
 private:
 
-  StkFloat *data_;
+  //StkFloat *data_;
   StkFloat dataRate_;
   size_t nFrames_;
   unsigned int nChannels_;

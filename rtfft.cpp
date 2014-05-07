@@ -12,7 +12,6 @@
 #include "SineWave.h"
 #include "RtWvOut.h"
 
-
 /* No need to explicitely include the OpenCL headers */
 #include "clFFT.h"
 #define SIZE 2048
@@ -29,7 +28,7 @@ int main( void )
 	cl_context ctx = 0;
 	cl_command_queue queue = 0;
 	cl_mem bufX;
-	float *X;
+	StkFloat *X;
 	cl_event event = NULL;
 	int ret = 0;
 	size_t N = SIZE;
@@ -75,6 +74,7 @@ int main( void )
 	// Option 1: Use StkFrames
 	
 	StkFrames frames( nFrames, 1 );
+	X = frames.data_;
 	try 
 	{
 	  dac->tick( sine.tick( frames ) );
@@ -88,24 +88,6 @@ int main( void )
 	// -------
 	// CLFFT 
 	//
-	/* Allocate host & initialize data. */
-	/* Only allocation shown for simplicity. */
-	float b = 0.0;
-	float step = M_PI/SIZE;
-	X = (float *)malloc(N * 2 * sizeof(*X));
-	for(int i = 0; i < SIZE*2; ++i)
-	{
-	  X[i] = sin(b*100) * exp(-b) ;
-	  b += step;
-	}
-	
-	//printf("VALUES ---- \n");
-	//for(int i = 0; i < SIZE; ++i)
-	//{
-	//  printf("%f\n",X[i]);
-	//}
-
-			   
 	/* Prepare OpenCL memory objects and place data inside them. */
 	bufX = clCreateBuffer( ctx, CL_MEM_READ_WRITE, N * 2 * sizeof(*X), NULL, &err );
 
