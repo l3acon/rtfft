@@ -4,7 +4,7 @@
 
 /* No need to explicitely include the OpenCL headers */
 #include "clFFT.h"
-#define SIZE 1024
+#define SIZE 2048
 
 int main( void )
 {

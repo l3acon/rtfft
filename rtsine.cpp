@@ -27,7 +27,7 @@ int main()
   sine.setFrequency( 441.0 );
 
   // Option 1: Use StkFrames
-  /*
+  
   StkFrames frames( nFrames, 1 );
   try {
     dac->tick( sine.tick( frames ) );
@@ -35,9 +35,10 @@ int main()
   catch ( StkError & ) {
     goto cleanup;
   }
-  */
+  
 
   // Option 2: Single-sample computations
+  /*
   for ( int i=0; i<nFrames; i++ ) {
     try {
       dac->tick( sine.tick() );
@@ -46,6 +47,7 @@ int main()
       goto cleanup;
     }
   }
+  */
 
  cleanup:
   delete dac;
