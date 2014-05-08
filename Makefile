@@ -1,27 +1,27 @@
 CC := g++
 CFLAGS := -D__MACOSX_CORE__  -Wall #-v 
-BUILDDIR := ./build
-SRCDIR := ./src
-L := ./library 
-INC := ./include
+BUILDDIR := build
+SRCDIR := src
+L := library 
+INC := include
 
 FWS := -framework OpenCL -framework CoreAudio -framework CoreMIDI -framework CoreFoundation 
 LIBDIR := /usr/local/include
 LIB := -lclFFT -lpthread 
 
-SOURCES := Stk.cpp SineWave.cpp  RtWvOut.cpp  RtAudio.cpp  Mutex.cpp  
-SRCS := $(SOURCES:%.cpp=$(SRCDIR)/%.cpp)
-REQALL := $(FWS) -L$(L) $(LIB) -I$(INC)
+OBJS := Stk.o SineWave.o  RtWvOut.o  RtAudio.o  Mutex.o  
+SRCS := $(OBJS:%.o=$(SRCDIR)/%.cpp)
+ALLDEPS := $(OBJS:%.o=$(BUILDDIR)/%.o)
+
+REQALL := -L$(L) -I$(INC)
 
 
-
-all: 
+all:  $(ALLDEPS)
+	@echo "$(CC) $(CFLAGS) $(FWS) $(LIB) -L$(L) -I$(INC) $(ALLDEPS) -o $(BUILDDIR)/rtfft rtfft.cpp "; $(CC) $(CFLAGS) -L$(L) -I$(INC) $(FWS) $(LIB) $(ALLDEPS) -o $(BUILDDIR)/rtfft rtfft.cpp
+	
+$(BUILDDIR)/%.o: $(SRCS)
 	@mkdir -p $(BUILDDIR)
-	@echo "$(CC) $(CFLAGS) $(REQALL) $(SRCS) -o $(BUILDDIR)/rtfft rtfft.cpp "; $(CC) $(CFLAGS) $(REQALL) $(SRCS) -o $(BUILDDIR)/rtfft rtfft.cpp
-
-#Stk:
-#	@echo "$(CC) $(CFLAGS) $(REQALL) -c -o $(BUILDDIR)/Stk.o $(SRCDIR)/Stk.cpp"; $(CC) $(CFLAGS) $(REQALL) -c -o $(BUILDDIR)/Stk.o $(SRCDIR)/Stk.cpp
-
+	@echo "$(CC) $(CFLAGS) $(REQALL) -I$(INC) -c -o $@ $(@:$(BUILDDIR)/%.o=$(SRCDIR)/%.cpp)";	$(CC) $(CFLAGS) -I$(INC) -c -o $@ $(@:$(BUILDDIR)/%.o=$(SRCDIR)/%.cpp)  
 
 clean:
 	rm build/*.o
