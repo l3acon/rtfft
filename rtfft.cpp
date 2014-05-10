@@ -22,23 +22,27 @@
 using namespace stk;
 
 /* OpenCL initalizations */
-cl_context ctx = 0;
-size_t N = BLOCK_SIZE;
+size_t N = 128;
+
 cl_int err;
 cl_platform_id platform = 0;
 cl_device_id device = 0;
-cl_context_properties props[3]; 
+cl_context_properties props[3] ;
+cl_context ctx = 0;
 cl_command_queue queue = 0;
-cl_mem bufX;
-// cl_event event = NULL; 	// we aren't using CL events
-int ret = 0;
+cl_mem bufIn;
+cl_mem bufOut;
 
 /* FFT library realted declarations */
 clfftPlanHandle planHandle;
-clfftDim dim;
-size_t clLengths[1]; 
-	  
-StkFloat *X;
+clfftDim dim = CLFFT_1D;
+size_t clLengths[1] ;
+  
+float *X;
+cl_event event = NULL;
+int ret = 0;
+
+int debug_once = 1;
 
 
 // This tick() function handles sample computation only.  It will be
@@ -52,19 +56,19 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
 
   X = (StkFloat*) outputBuffer;
 
-  std::cout<<"Caled 1\n"<<std::endl;
+  std::cout<<"Called 1\n"<<std::endl;
   for ( unsigned int i=0; i<nBufferFrames; i++ )
     *samples++ = sine->tick();
   
   // -------
   // CLFFT 
   //
-  err = clEnqueueWriteBuffer( queue, bufX, CL_TRUE, 0,
+  err = clEnqueueWriteBuffer( queue, bufIn, CL_TRUE, 0,
 	N * 2 * sizeof( *X ), X, 0, NULL, NULL );
 
   /* Execute the plan. */
-  err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue, 0, NULL, NULL, &bufX, NULL, NULL);
-
+  err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue, 0, NULL, NULL, &bufIn, &bufOut, NULL);
+  debug_once = 0;
   return 0;
 }
 
@@ -75,19 +79,14 @@ int main( void )
   //cl_int err;
   //cl_platform_id platform = 0;
   //cl_device_id device = 0;
-  props[0] = CL_CONTEXT_PLATFORM;
-  props[1] = 0;
-  props[2] = 0;
-  //cl_command_queue queue = 0;
-  //cl_mem bufX;
-  // cl_event event = NULL; 	// we aren't using CL events
-  int ret = 0;
-  
-  /* FFT library realted declarations */
-  //clfftPlanHandle planHandle;
-  //clfftDim dim = CLFFT_1D;
+  cl_context_properties props[3] = { CL_CONTEXT_PLATFORM, 0, 0 };
+  //`cl_context ctx = 0;
+  //`cl_command_queue queue = 0;
+  //`cl_mem bufIn;
+  //`cl_mem bufOut;
+
   clLengths[0] = N;
-			  
+  		  
   /* Setup OpenCL environment. */
   err = clGetPlatformIDs( 1, &platform, NULL );
   err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL );
@@ -100,22 +99,24 @@ int main( void )
   clfftSetupData fftSetup;
   err = clfftInitSetupData(&fftSetup);
   err = clfftSetup(&fftSetup);
- 
-  /* Prepare OpenCL memory objects and place data inside them. */
-  bufX = clCreateBuffer( ctx, CL_MEM_READ_WRITE, N * 2 * sizeof(*X), NULL, &err );
   
+  float *xout = (float*) malloc( N * 2 * sizeof(float));
+
+  /* Prepare OpenCL memory objects and place data inside them. */
+  bufIn = clCreateBuffer( ctx, CL_MEM_READ_ONLY, N * 2 * sizeof(*X), NULL, &err );
+  bufOut = clCreateBuffer( ctx, CL_MEM_READ_WRITE, N * 2 * sizeof(*X), NULL, &err );
+ 
   /* Create a default plan for a complex FFT. */
   err = clfftCreateDefaultPlan(&planHandle, ctx, dim, clLengths);
   
   /* Set plan parameters. */
   err = clfftSetPlanPrecision(planHandle, CLFFT_SINGLE);
   err = clfftSetLayout(planHandle, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);
-  err = clfftSetResultLocation(planHandle, CLFFT_INPLACE);
+  err = clfftSetResultLocation(planHandle, CLFFT_OUTOFPLACE);
 							  
   /* Bake the plan. */
   err = clfftBakePlan(planHandle, 1, &queue, NULL, NULL);
   
- 
   //	-------------
   //	STK 
   // Set the global sample rate before creating class instances.
@@ -131,7 +132,7 @@ int main( void )
   parameters.nChannels = 1;
   RtAudioFormat format = ( sizeof(StkFloat) == 8 ) ? RTAUDIO_FLOAT64 : RTAUDIO_FLOAT32;
   unsigned int bufferFrames = RT_BUFFER_SIZE;
-  
+
   try {
 	dac.openStream( &parameters, NULL, format, (unsigned int)Stk::sampleRate(), &bufferFrames, &tick, (void *)&sine );
   }
@@ -152,12 +153,14 @@ int main( void )
   //	---------
   //	STK stuff
 
+  // char keyhit;
   // Block waiting here.
-  char keyhit;
-  std::cout << "\nPlaying ... press <enter> to quit.\n";
-  std::cin.get( keyhit );
+  //std::cout << "\nPlaying ... press <enter> to quit.\n";
+  //std::cin.get( keyhit );
   
-  
+ for (;debug_once;)
+   usleep(10);
+
   // -------
   // CLFFT 
   //
@@ -168,13 +171,13 @@ int main( void )
   err = clFinish(queue);
 
   /* Fetch results of calculations. */
-  err = clEnqueueReadBuffer( queue, bufX, CL_TRUE, 0, N * 2 * sizeof( *X ), X, 0, NULL, NULL );
+  err = clEnqueueReadBuffer( queue, bufOut, CL_TRUE, 0, N * 2 * sizeof( *xout ), xout, 0, NULL, NULL );
   err = clFinish(queue);
 
   //printf("Transform ---- \n");
   for(int i = 0; i < BLOCK_SIZE; ++i)
   {
-	printf("%f\n",X[i]);
+	printf("%f\n",xout[i]);
   }
 
 
@@ -182,7 +185,8 @@ int main( void )
   // clFFT Cleanup
   //
   /* Release OpenCL memory objects. */
-  clReleaseMemObject( bufX );
+  clReleaseMemObject( bufOut );
+  clReleaseMemObject(bufIn);
 
   //free(X);
   

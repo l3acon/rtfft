@@ -9,7 +9,7 @@ FWS := -framework OpenCL -framework CoreAudio -framework CoreMIDI -framework Cor
 LIBDIR := /usr/local/include
 LIB := -lclFFT -lpthread 
 
-OBJS := Stk.o SineWave.o  RtWvOut.o  RtAudio.o  Mutex.o  
+OBJS := Stk.o SineWave.o RtWvOut.o RtAudio.o Mutex.o  
 SRCS := $(OBJS:%.o=$(SRCDIR)/%.cpp)
 ALLDEPS := $(OBJS:%.o=$(BUILDDIR)/%.o)
 
