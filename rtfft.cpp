@@ -8,7 +8,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <pthread.h>
 
+#include "NoteMaps.h"
 #include "SineWave.h"
 // #include "RtWvOut.h"
 #include "RtAudio.h"
@@ -42,7 +44,7 @@ float *X;
 cl_event event = NULL;
 int ret = 0;
 
-int debug_once = 1;
+int exect = 1;
 
 
 // This tick() function handles sample computation only.  It will be
@@ -56,19 +58,18 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
 
   X = (StkFloat*) outputBuffer;
 
-  std::cout<<"Called 1\n"<<std::endl;
+  //std::cout<<"Called 1\n"<<std::endl;
   for ( unsigned int i=0; i<nBufferFrames; i++ )
     *samples++ = sine->tick();
   
   // -------
   // CLFFT 
   //
-  err = clEnqueueWriteBuffer( queue, bufIn, CL_TRUE, 0,
-	N * 2 * sizeof( *X ), X, 0, NULL, NULL );
+  err = clEnqueueWriteBuffer( queue, bufIn, CL_TRUE, 0,	N * 2 * sizeof( *X ), X, 0, NULL, NULL );
 
   /* Execute the plan. */
   err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue, 0, NULL, NULL, &bufIn, &bufOut, NULL);
-  debug_once = 0;
+  exect = 0;
   return 0;
 }
 
@@ -141,7 +142,7 @@ int main( void )
 	return 0;
   }
 
-  sine.setFrequency(440.0);
+  sine.setFrequency(MUSICAL_NOTE_A4);
 
   try {
 	dac.startStream();
@@ -152,14 +153,43 @@ int main( void )
   }
   //	---------
   //	STK stuff
+ 
+  // set terminal to raw mode
+  system("stty raw");
 
-  // char keyhit;
-  // Block waiting here.
-  //std::cout << "\nPlaying ... press <enter> to quit.\n";
-  //std::cin.get( keyhit );
+  char keyhit = 'a'; 
+  while( keyhit != 'q' )
+  {
+	keyhit = getchar();
+	switch(keyhit)
+	{
+	  case 'a': sine.setFrequency(MUSICAL_NOTE_C4); break;
+	  case 's': sine.setFrequency(MUSICAL_NOTE_D4); break;
+	  case 'd': sine.setFrequency(MUSICAL_NOTE_E4); break;
+	  case 'f': sine.setFrequency(MUSICAL_NOTE_F4); break;
+	  case 'g': sine.setFrequency(MUSICAL_NOTE_G4); break;
+	  case 'h': sine.setFrequency(MUSICAL_NOTE_A4); break;
+	  case 'j': sine.setFrequency(MUSICAL_NOTE_B4); break;
+	  case 'k': sine.setFrequency(MUSICAL_NOTE_C5); break;
+	  case 'l': sine.setFrequency(MUSICAL_NOTE_D5); break;
+	  case '\'': sine.setFrequency(MUSICAL_NOTE_E5); break;
+	  case ';': sine.setFrequency(MUSICAL_NOTE_F5); break;
+	  
+	  case 'w': sine.setFrequency(MUSICAL_NOTE_Db4); break;
+	  case 'e': sine.setFrequency(MUSICAL_NOTE_Eb4); break;
+	  case 't': sine.setFrequency(MUSICAL_NOTE_Gb4); break;
+	  case 'y': sine.setFrequency(MUSICAL_NOTE_Ab4); break;
+	  case 'u': sine.setFrequency(MUSICAL_NOTE_Bb4); break;
+	  case 'o': sine.setFrequency(MUSICAL_NOTE_Db5); break;
+	  case 'p': sine.setFrequency(MUSICAL_NOTE_Eb5); break;
+	}
+  } 
   
- for (;debug_once;)
-   usleep(10);
+  // reset terminal to normal mode
+  system("stty cooked");
+
+  //for (;exect;)
+  // usleep(10);
 
   // -------
   // CLFFT 
@@ -177,30 +207,12 @@ int main( void )
   //printf("Transform ---- \n");
   for(int i = 0; i < BLOCK_SIZE; ++i)
   {
-	printf("%f\n",xout[i]);
+	printf("%f ",xout[i]);
   }
 
-
-  // 
-  // clFFT Cleanup
-  //
-  /* Release OpenCL memory objects. */
-  clReleaseMemObject( bufOut );
-  clReleaseMemObject(bufIn);
-
-  //free(X);
   
-  /* Release the plan. */
-  err = clfftDestroyPlan( &planHandle );
+  // do STK cleanup first
 
-  /* Release clFFT library. */
-  clfftTeardown( );
-
-  /* Release OpenCL working objects. */
-  clReleaseCommandQueue( queue );
-  clReleaseContext( ctx );
-
-  
   // 
   // STK Cleanup
   //
@@ -212,5 +224,24 @@ int main( void )
 	error.printMessage();
   }
 
-  return ret;
+
+  // 
+  // clFFT Cleanup
+  //
+  /* Release OpenCL memory objects. */
+  clReleaseMemObject( bufOut );
+  clReleaseMemObject(bufIn);
+
+  free(xout);
+  
+  /* Release the plan. */
+  err = clfftDestroyPlan( &planHandle );
+  /* Release clFFT library. */
+  clfftTeardown( );
+
+  /* Release OpenCL working objects. */
+  clReleaseCommandQueue( queue );
+  clReleaseContext( ctx );
+
+   return ret;
 }
