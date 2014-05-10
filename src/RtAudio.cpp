@@ -427,6 +427,7 @@ unsigned int RtApi :: getStreamSampleRate( void )
 // *************************************************** // 
  
 #if defined(__MACOSX_CORE__) 
+#include <algorithm>
  
 // The OS X CoreAudio API is designed to use a separate callback 
 // procedure for each of its audio devices.  A single RtAudio duplex 
@@ -885,9 +886,11 @@ bool RtApiCore :: probeDeviceOpen( unsigned int device, StreamMode mode, unsigne
   AudioDeviceID id = deviceList[ device ]; 
  
   // Setup for stream mode. 
-  bool isInput = false; 
+  // commenting out because -Wall is wet
+  // and it gets annoying
+  //bool isInput = false;  
   if ( mode == INPUT ) { 
-    isInput = true; 
+    //isInput = true; 
     property.mScope = kAudioDevicePropertyScopeInput; 
   } 
   else 
@@ -3605,11 +3608,11 @@ static const char* getAsioErrorString( ASIOError result )
  
 //============================================================================= 
  
-#define SAFE_RELEASE( objectPtr )\ 
-if ( objectPtr )\ 
-{\ 
-  objectPtr->Release();\ 
-  objectPtr = NULL;\ 
+#define SAFE_RELEASE( objectPtr )
+if ( objectPtr )
+{
+  objectPtr->Release();
+  objectPtr = NULL;
 } 
  
 typedef HANDLE ( __stdcall *TAvSetMmThreadCharacteristicsPtr )( LPCWSTR TaskName, LPDWORD TaskIndex ); 
