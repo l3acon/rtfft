@@ -23,6 +23,9 @@
 
 using namespace stk;
 
+/* use global variables for use
+ * in our tick function */
+
 /* OpenCL initalizations */
 size_t N = 128;
 
@@ -41,10 +44,12 @@ clfftDim dim = CLFFT_1D;
 size_t clLengths[1] ;
   
 float *X;
+float *xout;
 cl_event event = NULL;
 int ret = 0;
 
 int exect = 1;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 // This tick() function handles sample computation only.  It will be
@@ -70,54 +75,28 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
   /* Execute the plan. */
   err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue, 0, NULL, NULL, &bufIn, &bufOut, NULL);
   exect = 0;
+
+  /* Wait for calculations to be finished. */
+  err = clFinish(queue);
+
+  /* Fetch results of calculations. */
+  err = clEnqueueReadBuffer( queue, bufOut, CL_TRUE, 0, N * 2 * sizeof( *xout ), xout, 0, NULL, NULL );
+  err = clFinish(queue);
+  
+  fflush(stdout);
+  //printf("Transform ---- \n");
+  for(int i = 0; i < BLOCK_SIZE; ++i)
+  {
+	printf("%f ",xout[i]);
+  }
+  printf("\n");
+
   return 0;
 }
 
 
-int main( void )
+void *synth_thread(void*)
 {
-  /* OpenCL initalizations */
-  //cl_int err;
-  //cl_platform_id platform = 0;
-  //cl_device_id device = 0;
-  cl_context_properties props[3] = { CL_CONTEXT_PLATFORM, 0, 0 };
-  //`cl_context ctx = 0;
-  //`cl_command_queue queue = 0;
-  //`cl_mem bufIn;
-  //`cl_mem bufOut;
-
-  clLengths[0] = N;
-  		  
-  /* Setup OpenCL environment. */
-  err = clGetPlatformIDs( 1, &platform, NULL );
-  err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL );
-
-  props[1] = (cl_context_properties)platform;
-  ctx = clCreateContext( props, 1, &device, NULL, NULL, &err );
-  queue = clCreateCommandQueue( ctx, device, 0, &err );
-
-  /* Setup clFFT. */
-  clfftSetupData fftSetup;
-  err = clfftInitSetupData(&fftSetup);
-  err = clfftSetup(&fftSetup);
-  
-  float *xout = (float*) malloc( N * 2 * sizeof(float));
-
-  /* Prepare OpenCL memory objects and place data inside them. */
-  bufIn = clCreateBuffer( ctx, CL_MEM_READ_ONLY, N * 2 * sizeof(*X), NULL, &err );
-  bufOut = clCreateBuffer( ctx, CL_MEM_READ_WRITE, N * 2 * sizeof(*X), NULL, &err );
- 
-  /* Create a default plan for a complex FFT. */
-  err = clfftCreateDefaultPlan(&planHandle, ctx, dim, clLengths);
-  
-  /* Set plan parameters. */
-  err = clfftSetPlanPrecision(planHandle, CLFFT_SINGLE);
-  err = clfftSetLayout(planHandle, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);
-  err = clfftSetResultLocation(planHandle, CLFFT_OUTOFPLACE);
-							  
-  /* Bake the plan. */
-  err = clfftBakePlan(planHandle, 1, &queue, NULL, NULL);
-  
   //	-------------
   //	STK 
   // Set the global sample rate before creating class instances.
@@ -134,22 +113,30 @@ int main( void )
   RtAudioFormat format = ( sizeof(StkFloat) == 8 ) ? RTAUDIO_FLOAT64 : RTAUDIO_FLOAT32;
   unsigned int bufferFrames = RT_BUFFER_SIZE;
 
-  try {
-	dac.openStream( &parameters, NULL, format, (unsigned int)Stk::sampleRate(), &bufferFrames, &tick, (void *)&sine );
+  try 
+  {	dac.openStream( 
+	  &parameters, 
+	  NULL, format, 
+	  (unsigned int)Stk::sampleRate(),
+	  &bufferFrames, 
+	  &tick, (void *)&sine );
   }
-  catch ( RtAudioError &error ) {
-	error.printMessage();
-	return 0;
+  catch ( RtAudioError &error ) 
+  {	error.printMessage();
+	return NULL;
   }
 
   sine.setFrequency(MUSICAL_NOTE_A4);
 
-  try {
-	dac.startStream();
+  /*	-- setup done 
+   *	wait -- */
+
+  try 
+  {	dac.startStream();
   }
-  catch ( RtAudioError &error ) {
-	error.printMessage();
-	return 0;
+  catch ( RtAudioError &error ) 
+  {	error.printMessage();
+	return NULL;
   }
   //	---------
   //	STK stuff
@@ -184,46 +171,86 @@ int main( void )
 	  case 'p': sine.setFrequency(MUSICAL_NOTE_Eb5); break;
 	}
   } 
-  
   // reset terminal to normal mode
   system("stty cooked");
 
-  //for (;exect;)
-  // usleep(10);
-
-  // -------
-  // CLFFT 
-  //
-
-  //	assume the FFT is working?
-  
-  /* Wait for calculations to be finished. */
-  err = clFinish(queue);
-
-  /* Fetch results of calculations. */
-  err = clEnqueueReadBuffer( queue, bufOut, CL_TRUE, 0, N * 2 * sizeof( *xout ), xout, 0, NULL, NULL );
-  err = clFinish(queue);
-
-  //printf("Transform ---- \n");
-  for(int i = 0; i < BLOCK_SIZE; ++i)
-  {
-	printf("%f ",xout[i]);
-  }
-
-  
   // do STK cleanup first
 
   // 
   // STK Cleanup
   //
   // Shut down the output stream.
-  try {
-	dac.closeStream();
+  try 
+  {	dac.closeStream();
   }
-  catch ( RtAudioError &error ) {
-	error.printMessage();
+  catch ( RtAudioError &error ) 
+  {	error.printMessage();
   }
+  return NULL;
+}
 
+void *fft_thread(void*)
+{
+  /* OpenCL initalizations */
+  //cl_int err;
+  //cl_platform_id platform = 0;
+  //cl_device_id device = 0;
+  cl_context_properties props[3] = { CL_CONTEXT_PLATFORM, 0, 0 };
+  //`cl_context ctx = 0;
+  //`cl_command_queue queue = 0;
+  //`cl_mem bufIn;
+  //`cl_mem bufOut;
+
+  clLengths[0] = N;
+  		  
+  /* Setup OpenCL environment. */
+  err = clGetPlatformIDs( 1, &platform, NULL );
+  err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL );
+
+  props[1] = (cl_context_properties)platform;
+  ctx = clCreateContext( props, 1, &device, NULL, NULL, &err );
+  queue = clCreateCommandQueue( ctx, device, 0, &err );
+
+  /* Setup clFFT. */
+  clfftSetupData fftSetup;
+  err = clfftInitSetupData(&fftSetup);
+  err = clfftSetup(&fftSetup);
+  
+  xout = (float*) malloc( N * 2 * sizeof(float));
+
+  /* Prepare OpenCL memory objects and place data inside them. */
+  bufIn = clCreateBuffer( ctx, CL_MEM_READ_ONLY, N * 2 * sizeof(*X), NULL, &err );
+  bufOut = clCreateBuffer( ctx, CL_MEM_READ_WRITE, N * 2 * sizeof(*X), NULL, &err );
+ 
+  /* Create a default plan for a complex FFT. */
+  err = clfftCreateDefaultPlan(&planHandle, ctx, dim, clLengths);
+  
+  /* Set plan parameters. */
+  err = clfftSetPlanPrecision(planHandle, CLFFT_SINGLE);
+  err = clfftSetLayout(planHandle, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);
+  err = clfftSetResultLocation(planHandle, CLFFT_OUTOFPLACE);
+							  
+  /* Bake the plan. */
+  err = clfftBakePlan(planHandle, 1, &queue, NULL, NULL);
+
+  /*	-- setup done 
+   *	wait -- */
+  return NULL; 
+}
+
+int main( void )
+{
+  pthread_t t1;
+  pthread_t t2;
+  
+  pthread_create(&t1, NULL, &fft_thread, NULL);
+  pthread_create(&t2, NULL, &synth_thread, NULL);
+
+  // returns values for our threads
+  void* r1;
+  void* r2;
+  pthread_join(t2, &r2);
+  pthread_join(t1, &r1);
 
   // 
   // clFFT Cleanup
@@ -243,5 +270,5 @@ int main( void )
   clReleaseCommandQueue( queue );
   clReleaseContext( ctx );
 
-   return ret;
+  return ret;
 }

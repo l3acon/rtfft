@@ -1,5 +1,5 @@
 CC := g++
-CFLAGS := -D__MACOSX_CORE__  -Wall #-v 
+CFLAGS := -D__MACOSX_CORE__ -O3 -Wall #-v 
 BUILDDIR := build
 SRCDIR := src
 L := library 
