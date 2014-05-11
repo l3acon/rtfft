@@ -83,13 +83,14 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
   err = clEnqueueReadBuffer( queue, bufOut, CL_TRUE, 0, N * 2 * sizeof( *xout ), xout, 0, NULL, NULL );
   err = clFinish(queue);
   
-  fflush(stdout);
   //printf("Transform ---- \n");
+  printf("replot \n");
   for(int i = 0; i < BLOCK_SIZE; ++i)
   {
-	printf("%f ",xout[i]);
+	printf("%f\n",xout[i]);
   }
-  printf("\n");
+  //fflush(stdout);
+  printf("e\n");
 
   return 0;
 }
@@ -240,6 +241,15 @@ void *fft_thread(void*)
 
 int main( void )
 {
+  /* GNUPLOT setup */
+  printf("set yrange [-128:128]\n");
+  printf("set xrange [-128:128]\n");
+  printf("set style data lines\n");
+  printf("set grid\n");
+  
+  printf("plot \"-\" notitle\n");
+  printf("1\n 2\n 3\n e\n");
+  
   pthread_t t1;
   pthread_t t2;
   
