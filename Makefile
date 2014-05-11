@@ -1,5 +1,12 @@
+# developed for Mac OSX ONLY
+# some build dependencies:
+# 	Boost
+# 	FFTW
+# 	gcc >= 4.6
+# 	OpenCL SDK
+
 CC := g++
-CFLAGS := -D__MACOSX_CORE__ -O3 -Wall #-v 
+CFLAGS := -D__MACOSX_CORE__ -O3 -std=c++11 -Wall #-v 
 BUILDDIR := build
 SRCDIR := src
 L := library 

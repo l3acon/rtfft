@@ -15,11 +15,14 @@
 // #include "RtWvOut.h"
 #include "RtAudio.h"
 
-
 /* No need to explicitely include the OpenCL headers */
 #include "clFFT.h"
 #define BLOCK_SIZE 128
 
+#include <time.h>
+#include <chrono>
+#include <ratio>
+#define UPDATE_PLOT_HZ 1/10
 
 using namespace stk;
 
@@ -27,7 +30,7 @@ using namespace stk;
  * in our tick function */
 
 /* OpenCL initalizations */
-size_t N = 128;
+const size_t N = 128;
 
 cl_int err;
 cl_platform_id platform = 0;
@@ -50,6 +53,8 @@ int ret = 0;
 
 int exect = 1;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+char keyhit = 'a'; 
+
 
 
 // This tick() function handles sample computation only.  It will be
@@ -75,22 +80,6 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
   /* Execute the plan. */
   err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue, 0, NULL, NULL, &bufIn, &bufOut, NULL);
   exect = 0;
-
-  /* Wait for calculations to be finished. */
-  err = clFinish(queue);
-
-  /* Fetch results of calculations. */
-  err = clEnqueueReadBuffer( queue, bufOut, CL_TRUE, 0, N * 2 * sizeof( *xout ), xout, 0, NULL, NULL );
-  err = clFinish(queue);
-  
-  //printf("Transform ---- \n");
-  printf("replot \n");
-  for(int i = 0; i < BLOCK_SIZE; ++i)
-  {
-	printf("%f\n",xout[i]);
-  }
-  printf("e\n");
-  fflush(stdout);
 
   return 0;
 }
@@ -130,7 +119,7 @@ void *synth_thread(void*)
   sine.setFrequency(MUSICAL_NOTE_A4);
 
   /*	-- setup done 
-   *	wait -- */
+   *	wait? -- */
 
   try 
   {	dac.startStream();
@@ -145,7 +134,6 @@ void *synth_thread(void*)
   // set terminal to raw mode
   system("stty raw");
 
-  char keyhit = 'a'; 
   while( keyhit != 'q' )
   {
 	keyhit = getchar();
@@ -236,6 +224,42 @@ void *fft_thread(void*)
 
   /*	-- setup done 
    *	wait -- */
+  
+  std::chrono::steady_clock::time_point begin_c = std::chrono::steady_clock::now();
+  std::chrono::steady_clock::time_point end_c = std::chrono::steady_clock::now();
+  
+  while( keyhit != 'q')
+  {
+	std::chrono::steady_clock::duration time_span = end_c - begin_c;
+	double dur = double(time_span.count()) * std::chrono::steady_clock::period::num / std::chrono::steady_clock::period::den;	
+	//printf("dur: %f\n", dur);
+	if( UPDATE_PLOT_HZ < dur)
+	{
+	  dur = double(time_span.count()) * std::chrono::steady_clock::period::num / std::chrono::steady_clock::period::den;	
+	  begin_c = std::chrono::steady_clock::now();
+	  /* Wait for calculations to be finished. */
+	  err = clFinish(queue);
+
+	  /* Fetch results of calculations. */
+	  err = clEnqueueReadBuffer( queue, bufOut, CL_TRUE, 0, N * 2 * sizeof( *xout ), xout, 0, NULL, NULL );
+	  err = clFinish(queue);
+	  
+	  //printf("Transform ---- \n");
+	  printf("replot \n");
+	  for(int i = 0; i < BLOCK_SIZE; ++i)
+	  {
+		printf("%f\n",xout[i]);
+	  }
+	  printf("e\n");
+	  fflush(stdout);
+
+	}
+	else
+	{
+	  usleep( 1000);
+	  end_c = std::chrono::steady_clock::now();
+	}
+  }
   return NULL; 
 }
 
@@ -243,7 +267,7 @@ int main( void )
 {
   /* GNUPLOT setup */
   printf("set yrange [-128:128]\n");
-  printf("set xrange [-128:128]\n");
+  printf("set xrange [0:128]\n");
   printf("set style data lines\n");
   printf("set grid\n");
   
