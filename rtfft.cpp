@@ -89,8 +89,8 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
   {
 	printf("%f\n",xout[i]);
   }
-  //fflush(stdout);
   printf("e\n");
+  fflush(stdout);
 
   return 0;
 }
