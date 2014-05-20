@@ -11,8 +11,8 @@ BUILDDIR := build
 SRCDIR := src
 L := library 
 INC := include
-OUT := bee
-TGT := threebees.cpp
+OUT := rtfft
+TGT := rtfft.cpp
 
 FWS := -framework OpenCL -framework CoreAudio -framework CoreMIDI -framework CoreFoundation 
 LIBDIR := /usr/local/include

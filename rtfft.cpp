@@ -1,28 +1,31 @@
-//	Matthew Fernandez 2014
-//
-//	This project is the combination of 
-//	at least two other projects. Their
-//	licenses may not be compatible.
-//
-
+// threebees.cpp STK tutorial program
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 #include <pthread.h>
 
 #include "NoteMaps.h"
-#include "SineWave.h"
-// #include "RtWvOut.h"
-#include "RtAudio.h"
 
-/* No need to explicitely include the OpenCL headers */
-#include "clFFT.h"
-#define BLOCK_SIZE 128
+#include "BeeThree.h"
+#include "RtAudio.h"
+#include "Messager.h"
+#include "Voicer.h"
+#include "SKINI.msg"
 
 #include <time.h>
 #include <chrono>
 #include <ratio>
 #define UPDATE_PLOT_HZ 1/10
+
+/* No need to explicitely include the OpenCL headers */
+#include "clFFT.h"
+#define BLOCK_SIZE 128
+
+
+
+#include <algorithm>
+using std::min;
+#define N_INST 5
 
 using namespace stk;
 
@@ -57,21 +60,108 @@ char keyhit = 'a';
 
 
 
-// This tick() function handles sample computation only.  It will be
-// called automatically when the system needs a new buffer of audio
-// samples.
+// The TickData structure holds all the class instances and data that
+// are shared by the various processing functions.
+struct TickData {
+  Voicer voicer;
+  Messager messager;
+  Skini::Message message;
+  int counter;
+  bool haveMessage;
+  bool done;
+
+  // Default constructor.
+  TickData()
+    : counter(0), haveMessage(false), done( false ) {}
+};
+
+#define DELTA_CONTROL_TICKS 64 // default sample frames between control input checks
+
+// The processMessage() function encapsulates the handling of control
+// messages.  It can be easily relocated within a program structure
+// depending on the desired scheduling scheme.
+void processMessage( TickData* data )
+{
+  register StkFloat value1 = data->message.floatValues[0];
+  register StkFloat value2 = data->message.floatValues[1];
+
+  switch( data->message.type ) {
+
+  case __SK_Exit_:
+    data->done = true;
+    return;
+
+  case __SK_NoteOn_:
+    if ( value2 == 0.0 ) // velocity is zero ... really a NoteOff
+      data->voicer.noteOff( value1, 64.0 );
+    else { // a NoteOn
+      data->voicer.noteOn( value1, value2 );
+    }
+    break;
+
+  case __SK_NoteOff_:
+    data->voicer.noteOff( value1, value2 );
+    break;
+
+  case __SK_ControlChange_:
+    data->voicer.controlChange( (int) value1, value2 );
+    break;
+
+  case __SK_AfterTouch_:
+    data->voicer.controlChange( 128, value1 );
+
+  case __SK_PitchChange_:
+    data->voicer.setFrequency( value1 );
+    break;
+
+  case __SK_PitchBend_:
+    data->voicer.pitchBend( value1 );
+
+  } // end of switch
+
+  data->haveMessage = false;
+  return;
+}
+
+// This tick() function handles sample computation and scheduling of
+// control updates.  It will be called automatically when the system
+// needs a new buffer of audio samples.
 int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
          double streamTime, RtAudioStreamStatus status, void *dataPointer )
 {
-  SineWave *sine = (SineWave *) dataPointer;
+  TickData *data = (TickData *) dataPointer;
   register StkFloat *samples = (StkFloat *) outputBuffer;
-
+  int counter, nTicks = (int) nBufferFrames;
+ 
+  // For our FFT
   X = (StkFloat*) outputBuffer;
 
-  //std::cout<<"Called 1\n"<<std::endl;
-  for ( unsigned int i=0; i<nBufferFrames; i++ )
-    *samples++ = sine->tick();
-  
+  while ( nTicks > 0 && !data->done ) 
+  {
+
+    if ( !data->haveMessage ) {
+      data->messager.popMessage( data->message );
+      if ( data->message.type > 0 ) {
+        data->counter = (long) (data->message.time * Stk::sampleRate());
+        data->haveMessage = true;
+      }
+      else
+        data->counter = DELTA_CONTROL_TICKS;
+    }
+
+    counter = min( nTicks, data->counter );
+    data->counter -= counter;
+
+    for ( int i=0; i<counter; i++ ) {
+      *samples++ = data->voicer.tick();
+      nTicks--;
+    }
+    if ( nTicks == 0 ) break;
+
+    // Process control messages.
+    if ( data->haveMessage ) processMessage( data );
+  }
+ 
   // -------
   // CLFFT 
   //
@@ -81,101 +171,8 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
   err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1, &queue, 0, NULL, NULL, &bufIn, &bufOut, NULL);
   exect = 0;
 
+
   return 0;
-}
-
-
-void *synth_thread(void*)
-{
-  //	-------------
-  //	STK 
-  // Set the global sample rate before creating class instances.
-  Stk::setSampleRate( 44100.0 );
-  // Stk::showWarnings( true );
-
-  SineWave sine;
-  RtAudio dac;
-
-  // Figure out how many bytes in an StkFloat and setup the RtAudio stream.
-  RtAudio::StreamParameters parameters;
-  parameters.deviceId = dac.getDefaultOutputDevice();
-  parameters.nChannels = 1;
-  RtAudioFormat format = ( sizeof(StkFloat) == 8 ) ? RTAUDIO_FLOAT64 : RTAUDIO_FLOAT32;
-  unsigned int bufferFrames = RT_BUFFER_SIZE;
-
-  try 
-  {	dac.openStream( 
-	  &parameters, 
-	  NULL, format, 
-	  (unsigned int)Stk::sampleRate(),
-	  &bufferFrames, 
-	  &tick, (void *)&sine );
-  }
-  catch ( RtAudioError &error ) 
-  {	error.printMessage();
-	return NULL;
-  }
-
-  sine.setFrequency(MUSICAL_NOTE_A4);
-
-  /*	-- setup done 
-   *	wait? -- */
-
-  try 
-  {	dac.startStream();
-  }
-  catch ( RtAudioError &error ) 
-  {	error.printMessage();
-	return NULL;
-  }
-  //	---------
-  //	STK stuff
- 
-  // set terminal to raw mode
-  system("stty raw");
-
-  while( keyhit != 'q' )
-  {
-	keyhit = getchar();
-	switch(keyhit)
-	{
-	  case 'a': sine.setFrequency(MUSICAL_NOTE_C4); break;
-	  case 's': sine.setFrequency(MUSICAL_NOTE_D4); break;
-	  case 'd': sine.setFrequency(MUSICAL_NOTE_E4); break;
-	  case 'f': sine.setFrequency(MUSICAL_NOTE_F4); break;
-	  case 'g': sine.setFrequency(MUSICAL_NOTE_G4); break;
-	  case 'h': sine.setFrequency(MUSICAL_NOTE_A4); break;
-	  case 'j': sine.setFrequency(MUSICAL_NOTE_B4); break;
-	  case 'k': sine.setFrequency(MUSICAL_NOTE_C5); break;
-	  case 'l': sine.setFrequency(MUSICAL_NOTE_D5); break;
-	  case '\'': sine.setFrequency(MUSICAL_NOTE_E5); break;
-	  case ';': sine.setFrequency(MUSICAL_NOTE_F5); break;
-	  
-	  case 'w': sine.setFrequency(MUSICAL_NOTE_Db4); break;
-	  case 'e': sine.setFrequency(MUSICAL_NOTE_Eb4); break;
-	  case 't': sine.setFrequency(MUSICAL_NOTE_Gb4); break;
-	  case 'y': sine.setFrequency(MUSICAL_NOTE_Ab4); break;
-	  case 'u': sine.setFrequency(MUSICAL_NOTE_Bb4); break;
-	  case 'o': sine.setFrequency(MUSICAL_NOTE_Db5); break;
-	  case 'p': sine.setFrequency(MUSICAL_NOTE_Eb5); break;
-	}
-  } 
-  // reset terminal to normal mode
-  system("stty cooked");
-
-  // do STK cleanup first
-
-  // 
-  // STK Cleanup
-  //
-  // Shut down the output stream.
-  try 
-  {	dac.closeStream();
-  }
-  catch ( RtAudioError &error ) 
-  {	error.printMessage();
-  }
-  return NULL;
 }
 
 void *fft_thread(void*)
@@ -263,7 +260,7 @@ void *fft_thread(void*)
   return NULL; 
 }
 
-int main( void )
+int main()
 {
   /* GNUPLOT setup */
   printf("set yrange [-128:128]\n");
@@ -275,15 +272,80 @@ int main( void )
   printf("1\n 2\n 3\n e\n");
   
   pthread_t t1;
-  pthread_t t2;
-  
   pthread_create(&t1, NULL, &fft_thread, NULL);
-  pthread_create(&t2, NULL, &synth_thread, NULL);
+ 
+  // Set the global sample rate and rawwave path before creating class instances.
+  Stk::setSampleRate( 44100.0 );
+  Stk::setRawwavePath( "./rawwaves/" );
 
-  // returns values for our threads
+  int i;
+  TickData data;
+  RtAudio dac;
+  Instrmnt *instrument[N_INST];
+  for ( i=0; i<N_INST; i++ ) instrument[i] = 0;
+
+  // Figure out how many bytes in an StkFloat and setup the RtAudio stream.
+  RtAudio::StreamParameters parameters;
+  parameters.deviceId = dac.getDefaultOutputDevice();
+  parameters.nChannels = 1;
+  RtAudioFormat format = ( sizeof(StkFloat) == 8 ) ? RTAUDIO_FLOAT64 : RTAUDIO_FLOAT32;
+  unsigned int bufferFrames = RT_BUFFER_SIZE;
+  try {
+    dac.openStream( &parameters, NULL, format, (unsigned int)Stk::sampleRate(), &bufferFrames, &tick, (void *)&data );
+  }
+  catch ( RtAudioError &error ) {
+    error.printMessage();
+    goto cleanup;
+  }
+
+  try {
+    // Define and load the BeeThree instruments
+    for ( i=0; i<N_INST; i++ )
+      instrument[i] = new BeeThree();
+  }
+  catch ( StkError & ) {
+    goto cleanup;
+  }
+
+  // "Add" the instruments to the voicer.
+  for ( i=0; i<N_INST; i++ )
+    data.voicer.addInstrument( instrument[i] );
+
+  if ( data.messager.startMidiInput() == false )
+  {
+	printf("Failure to start Midi Input\n");
+    goto cleanup;
+  }
+
+  try {
+    dac.startStream();
+  }
+  catch ( RtAudioError &error ) {
+    error.printMessage();
+    goto cleanup;
+  }
+
+  system("stty raw");
+  // Block waiting until callback signals done.
+  while( keyhit != 'q' )
+  {
+	keyhit = getchar();
+  }
+  system("stty cooked");
+	
+ 
+  // Shut down the callback and output stream.
+  try {
+    dac.closeStream();
+  }
+  catch ( RtAudioError &error ) {
+    error.printMessage();
+  }
+
+ cleanup:
+  for ( i=0; i<N_INST; i++ ) delete instrument[i];
+
   void* r1;
-  void* r2;
-  pthread_join(t2, &r2);
   pthread_join(t1, &r1);
 
   // 
@@ -304,5 +366,6 @@ int main( void )
   clReleaseCommandQueue( queue );
   clReleaseContext( ctx );
 
-  return ret;
+
+  return 0;
 }
