@@ -6,10 +6,10 @@
 # 	OpenCL SDK
 
 CC := g++
-CFLAGS := -D__MACOSX_CORE__ -O3 -std=c++11 -Wall #-v 
+CFLAGS := -D__MACOSX_CORE__ -O3 -std=c++11 -Wall -pipe #-v
 BUILDDIR := build
 SRCDIR := src
-L := library 
+L := library
 INC := include
 OUT := rtfft
 TGT := rtfft.cpp
@@ -31,4 +31,4 @@ $(ALLDEPS):
 
 clean:
 	rm build/*.o
-	rm build/$(out)
+	rm build/$(OUT)
