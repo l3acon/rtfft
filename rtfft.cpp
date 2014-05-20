@@ -1,5 +1,9 @@
 
+//	Matthew Fernandez 2014
 //
+//	This project is the combination of 
+//	at least two other projects. Their
+//	licenses may not be compatible.
 //
 
 #include <stdlib.h>
@@ -15,6 +19,8 @@
 #include "Voicer.h"
 #include "SKINI.msg"
 
+#include "common.h"
+
 #include <time.h>
 #include <chrono>
 #include <ratio>
@@ -24,11 +30,11 @@
 #include "clFFT.h"
 #define BLOCK_SIZE 128
 
-
-
 #include <algorithm>
 using std::min;
 #define N_INST 5
+
+#define DELTA_CONTROL_TICKS 64 // default sample frames between control input checks
 
 using namespace stk;
 
@@ -37,11 +43,12 @@ using namespace stk;
 
 /* OpenCL initalizations */
 const size_t N = 128;
+int enable_gnuplot = 1;
 
 cl_int err;
 cl_platform_id platform = 0;
 cl_device_id device = 0;
-cl_context_properties props[3] ;
+//cl_context_properties props[3] ;
 cl_context ctx = 0;
 cl_command_queue queue = 0;
 cl_mem bufIn;
@@ -77,7 +84,6 @@ struct TickData
     : counter(0), haveMessage(false), done( false ) {}
 };
 
-#define DELTA_CONTROL_TICKS 64 // default sample frames between control input checks
 
 // The processMessage() function encapsulates the handling of control
 // messages.  It can be easily relocated within a program structure
@@ -247,15 +253,18 @@ void *fft_thread(void*)
 	  /* Fetch results of calculations. */
 	  err = clEnqueueReadBuffer( queue, bufOut, CL_TRUE, 0, N * 2 * sizeof( *xout ), xout, 0, NULL, NULL );
 	  err = clFinish(queue);
-	  
-	  //printf("Transform ---- \n");
-	  printf("replot \n");
-	  for(int i = 0; i < BLOCK_SIZE; ++i)
+	  if(enable_gnuplot)
 	  {
-		printf("%f\n",xout[i]);
+
+		//printf("Transform ---- \n");
+		printf("replot \n");
+		for(int i = 0; i < BLOCK_SIZE; ++i)
+		{
+		  printf("%f\n",xout[i]);
+		}
+		printf("e\n");
+		fflush(stdout);
 	  }
-	  printf("e\n");
-	  fflush(stdout);
 
 	}
 	else
@@ -267,20 +276,23 @@ void *fft_thread(void*)
   return NULL; 
 }
 
-int main()
+int main( int argc, char **argv )
 {
-  /* GNUPLOT setup */
-  printf("set yrange [-128:128]\n");
-  printf("set xrange [0:128]\n");
-  printf("set style data lines\n");
-  printf("set grid\n");
+  if( find_option( argc, argv, "-h" ) >= 0 )
+  {
+	  printf( "Options:\n" );
+	  printf( "-h to see this help\n" );
+	  printf( "-o to enable output for GNUPLOT\n" );
+	  return 0;
+  }
   
-  printf("plot \"-\" notitle\n");
-  printf("1\n 2\n 3\n e\n");
-  
+  if( find_option( argc, argv, "-o" ) == -1 )
+	enable_gnuplot = 0;
+  else
+	gnuplot_setup();
+
   pthread_t t1;
   pthread_create(&t1, NULL, &fft_thread, NULL);
- 
   // Set the global sample rate and rawwave path before creating class instances.
   Stk::setSampleRate( 44100.0 );
   Stk::setRawwavePath( "./rawwaves/" );
