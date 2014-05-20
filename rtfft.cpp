@@ -1,4 +1,7 @@
-// threebees.cpp STK tutorial program
+
+//
+//
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -58,11 +61,10 @@ int exect = 1;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 char keyhit = 'a'; 
 
-
-
 // The TickData structure holds all the class instances and data that
 // are shared by the various processing functions.
-struct TickData {
+struct TickData 
+{
   Voicer voicer;
   Messager messager;
   Skini::Message message;
@@ -85,7 +87,8 @@ void processMessage( TickData* data )
   register StkFloat value1 = data->message.floatValues[0];
   register StkFloat value2 = data->message.floatValues[1];
 
-  switch( data->message.type ) {
+  switch( data->message.type ) 
+  {
 
   case __SK_Exit_:
     data->done = true;
@@ -94,7 +97,8 @@ void processMessage( TickData* data )
   case __SK_NoteOn_:
     if ( value2 == 0.0 ) // velocity is zero ... really a NoteOff
       data->voicer.noteOff( value1, 64.0 );
-    else { // a NoteOn
+    else 
+	{ // a NoteOn
       data->voicer.noteOn( value1, value2 );
     }
     break;
@@ -139,9 +143,11 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
   while ( nTicks > 0 && !data->done ) 
   {
 
-    if ( !data->haveMessage ) {
+    if ( !data->haveMessage ) 
+	{
       data->messager.popMessage( data->message );
-      if ( data->message.type > 0 ) {
+      if ( data->message.type > 0 ) 
+	  {
         data->counter = (long) (data->message.time * Stk::sampleRate());
         data->haveMessage = true;
       }
@@ -152,7 +158,8 @@ int tick( void *outputBuffer, void *inputBuffer, unsigned int nBufferFrames,
     counter = min( nTicks, data->counter );
     data->counter -= counter;
 
-    for ( int i=0; i<counter; i++ ) {
+    for ( int i=0; i<counter; i++ ) 
+	{
       *samples++ = data->voicer.tick();
       nTicks--;
     }
@@ -290,20 +297,24 @@ int main()
   parameters.nChannels = 1;
   RtAudioFormat format = ( sizeof(StkFloat) == 8 ) ? RTAUDIO_FLOAT64 : RTAUDIO_FLOAT32;
   unsigned int bufferFrames = RT_BUFFER_SIZE;
-  try {
+  try 
+  {
     dac.openStream( &parameters, NULL, format, (unsigned int)Stk::sampleRate(), &bufferFrames, &tick, (void *)&data );
   }
-  catch ( RtAudioError &error ) {
+  catch ( RtAudioError &error ) 
+  {
     error.printMessage();
     goto cleanup;
   }
 
-  try {
+  try 
+  {
     // Define and load the BeeThree instruments
     for ( i=0; i<N_INST; i++ )
       instrument[i] = new BeeThree();
   }
-  catch ( StkError & ) {
+  catch ( StkError & ) 
+  {
     goto cleanup;
   }
 
@@ -317,10 +328,12 @@ int main()
     goto cleanup;
   }
 
-  try {
+  try 
+  {
     dac.startStream();
   }
-  catch ( RtAudioError &error ) {
+  catch ( RtAudioError &error ) 
+  {
     error.printMessage();
     goto cleanup;
   }
@@ -335,10 +348,12 @@ int main()
 	
  
   // Shut down the callback and output stream.
-  try {
+  try 
+  {
     dac.closeStream();
   }
-  catch ( RtAudioError &error ) {
+  catch ( RtAudioError &error ) 
+  {
     error.printMessage();
   }
 
