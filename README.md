@@ -14,8 +14,6 @@ To Do
 =====
 Use a faster plot (maybe SDL) GNUPLOT is too slow somehow.
 
-Features
------
 Add back in the ability to use the keyboard as input device.
 
 Ability to disable FFT output.
